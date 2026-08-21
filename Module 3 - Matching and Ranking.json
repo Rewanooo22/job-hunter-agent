@@ -1,0 +1,207 @@
+{
+  "name": "Module 3 - Matching and Ranking",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "3f6c610e-743d-4683-9f8f-c9e6626287c7",
+      "name": "Manual Trigger (standalone test)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "n1",
+              "name": "candidate_profile",
+              "value": "={{ $json.candidate_profile && $json.candidate_profile.candidate_id ? $json.candidate_profile : { \"candidate_id\": \"sample_001\", \"candidate_name\": \"Sample Candidate\", \"experience_years\": 5, \"job_titles\": [\"Backend Engineer\"], \"preferred_roles\": [\"Senior Backend Engineer\"], \"technical_skills\": [\"Python\", \"PostgreSQL\", \"Docker\"], \"programming_languages\": [\"Python\", \"JavaScript\"], \"frameworks\": [\"Django\"], \"tools\": [\"Docker\", \"Git\"], \"keywords\": [\"Backend Engineer\", \"API development\"], \"education\": [ { \"degree\": \"BSc\", \"field\": \"Computer Science\", \"institution\": \"Sample University\", \"year\": 2018 } ] } }}",
+              "type": "object"
+            },
+            {
+              "id": "n2",
+              "name": "jobs",
+              "value": "={{ $json.jobs && $json.jobs.length ? $json.jobs : [ { \"job_id\": \"job_001\", \"job_title\": \"Senior Backend Engineer\", \"company\": \"Acme Corp\", \"application_url\": \"https://example.com/job1\", \"required_skills\": [\"Python\", \"PostgreSQL\", \"Docker\"], \"preferred_skills\": [\"Kubernetes\"], \"required_experience_years\": 4, \"description\": \"We need a backend engineer with Python and PostgreSQL experience.\" }, { \"job_id\": \"job_002\", \"job_title\": \"Frontend Developer\", \"company\": \"Beta Inc\", \"application_url\": \"https://example.com/job2\", \"required_skills\": [\"React\", \"JavaScript\", \"CSS\"], \"required_experience_years\": 2, \"description\": \"Frontend role using React.\" } ] }}",
+              "type": "array"
+            },
+            {
+              "id": "n3",
+              "name": "method",
+              "value": "={{ $json.method || \"hybrid\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "a3b71d0b-a4bc-4e0e-a1c9-295d96bdd163",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        272,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "candidate_profile",
+              "type": "object"
+            },
+            {
+              "name": "jobs",
+              "type": "array"
+            },
+            {
+              "name": "method"
+            }
+          ]
+        }
+      },
+      "id": "3446349c-2f14-49ae-b1fb-f68330f2e248",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const buildCtx = $(\"Build Embedding Batch Request\").item.json;\nconst candidate = buildCtx.candidate_profile;\nconst jobs = buildCtx.jobs || [];\nconst method = buildCtx.method || \"hybrid\";\nconst resp = $input.item.json;\n\nconst SYNONYMS = { \"js\":\"javascript\",\"javascript\":\"js\",\"postgres\":\"postgresql\",\"postgresql\":\"postgres\",\"node\":\"node.js\",\"nodejs\":\"node.js\",\"node.js\":\"node\",\"py\":\"python\",\"k8s\":\"kubernetes\",\"golang\":\"go\" };\nfunction norm(s){ return (s||\"\").toLowerCase().trim(); }\nfunction expand(s){ const n=norm(s); const syn=SYNONYMS[n]; return syn? [n,syn] : [n]; }\nfunction skillSetMatch(required, have){\n  const haveNorm = new Set();\n  (have||[]).forEach(function(h){ expand(h).forEach(function(x){ haveNorm.add(x); }); });\n  let matched=[]; let missing=[];\n  (required||[]).forEach(function(r){\n    const variants = expand(r);\n    const isMatch = variants.some(function(v){ return haveNorm.has(v); });\n    if (isMatch) matched.push(r); else missing.push(r);\n  });\n  return { matched: matched, missing: missing };\n}\nfunction keywordScore(job, candidate){\n  const required = job.required_skills || [];\n  const have = (candidate.technical_skills||[]).concat(candidate.programming_languages||[]).concat(candidate.frameworks||[]).concat(candidate.tools||[]);\n  if (required.length === 0) return { score: 100, matched: [], missing: [] };\n  const r = skillSetMatch(required, have);\n  const score = (r.matched.length / required.length) * 100;\n  return { score: score, matched: r.matched, missing: r.missing };\n}\nfunction cosine(a, b) {\n  if (!Array.isArray(a) || !Array.isArray(b) || a.length === 0 || a.length !== b.length) return null;\n  let dot = 0, na = 0, nb = 0;\n  for (let i = 0; i < a.length; i++) { dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }\n  const denom = Math.sqrt(na) * Math.sqrt(nb);\n  return denom === 0 ? 0 : Math.max(0, Math.min(1, dot / denom));\n}\nfunction tokenOverlapProxy(job, candidate){\n  const candTokens = new Set();\n  (candidate.keywords||[]).concat(candidate.technical_skills||[]).concat(candidate.job_titles||[]).forEach(function(k){ norm(k).split(/\\s+/).forEach(function(t){ if(t) candTokens.add(t); }); });\n  const jobText = ((job.description||\"\") + \" \" + (job.job_title||\"\") + \" \" + (job.required_skills||[]).join(\" \")).toLowerCase();\n  const jobTokens = jobText.split(/[^a-z0-9.+#]+/).filter(Boolean);\n  if (jobTokens.length === 0 || candTokens.size === 0) return 0;\n  let hits = 0;\n  jobTokens.forEach(function(t){ if (candTokens.has(t)) hits++; });\n  return Math.min(1, (hits / jobTokens.length) * 3);\n}\nfunction experienceMatch(job, candidate){\n  const required = job.required_experience_years;\n  const have = candidate.experience_years || 0;\n  if (required === undefined || required === null) return { candidate_years: have, required_years: null, satisfied: true };\n  return { candidate_years: have, required_years: required, satisfied: have >= required };\n}\nfunction titleScore(job, candidate){\n  const jt = norm(job.job_title);\n  const titles = (candidate.job_titles||[]).concat(candidate.preferred_roles||[]).map(norm);\n  return titles.some(function(t){ return jt.indexOf(t) !== -1 || t.indexOf(jt) !== -1; }) ? 1 : 0;\n}\nfunction educationScore(job, candidate){\n  if (!job.education_requirement) return 1;\n  const req = norm(job.education_requirement);\n  return (candidate.education||[]).some(function(e){ return norm(e.degree).indexOf(req)!==-1 || req.indexOf(norm(e.degree))!==-1; }) ? 1 : 0;\n}\nfunction preferredSkillScore(job, candidate){\n  const pref = job.preferred_skills || [];\n  if (pref.length === 0) return 1;\n  const have = (candidate.technical_skills||[]).concat(candidate.programming_languages||[]).concat(candidate.frameworks||[]).concat(candidate.tools||[]);\n  const r = skillSetMatch(pref, have);\n  return r.matched.length / pref.length;\n}\nfunction locationScore(job, candidate){\n  if (!job.location) return 1;\n  const jobLoc = norm(job.location);\n  if (/remote/.test(jobLoc)) return 1;\n  if (!candidate.location) return 1;\n  const candLoc = norm(candidate.location);\n  return (jobLoc.indexOf(candLoc) !== -1 || candLoc.indexOf(jobLoc) !== -1) ? 1 : 0;\n}\n\nlet embeddings = null;\nlet semanticMethodUsed = \"token_overlap_fallback\";\nif (resp && Array.isArray(resp.embeddings) && resp.embeddings.length === jobs.length + 1) {\n  embeddings = resp.embeddings.map(function(e){ return e.values; });\n  semanticMethodUsed = \"gemini-embedding-001_cosine\";\n}\n\nconst WEIGHTS = { skill: 0.35, semantic: 0.25, experience: 0.15, preferred: 0.10, education: 0.05, title: 0.05, location: 0.05 };\n\nconst ranked = jobs.map(function(job, idx){\n  const kw = keywordScore(job, candidate);\n  let sem;\n  if (embeddings) {\n    const c = cosine(embeddings[0], embeddings[idx + 1]);\n    sem = c === null ? tokenOverlapProxy(job, candidate) : c;\n  } else {\n    sem = tokenOverlapProxy(job, candidate);\n  }\n  const exp = experienceMatch(job, candidate);\n  const expScore = exp.required_years === null ? 100 : (exp.satisfied ? 100 : Math.max(0, (exp.candidate_years / exp.required_years) * 100));\n  const pref = preferredSkillScore(job, candidate) * 100;\n  const edu = educationScore(job, candidate) * 100;\n  const title = titleScore(job, candidate) * 100;\n  const loc = locationScore(job, candidate) * 100;\n  const hybridScore = (kw.score * WEIGHTS.skill) + (sem*100 * WEIGHTS.semantic) + (expScore * WEIGHTS.experience) + (pref * WEIGHTS.preferred) + (edu * WEIGHTS.education) + (title * WEIGHTS.title) + (loc * WEIGHTS.location);\n  let finalScore;\n  if (method === \"keyword\") finalScore = kw.score;\n  else if (method === \"semantic\") finalScore = sem * 100;\n  else finalScore = hybridScore;\n  finalScore = Math.round(finalScore * 10) / 10;\n  let decision;\n  if (finalScore >= 75) decision = \"APPLY\";\n  else if (finalScore >= 50) decision = \"REVIEW\";\n  else decision = \"REJECT\";\n  const explanationParts = [];\n  explanationParts.push(kw.matched.length + \"/\" + ((job.required_skills||[]).length) + \" required skills matched\");\n  if (kw.missing.length) explanationParts.push(\"missing: \" + kw.missing.join(\", \"));\n  explanationParts.push(\"experience \" + exp.candidate_years + \"y vs required \" + (exp.required_years===null?\"unspecified\":exp.required_years+\"y\") + (exp.satisfied?\" (met)\":\" (not met)\"));\n  explanationParts.push(\"semantic method: \" + semanticMethodUsed);\n  explanationParts.push(\"method=\" + method + \", score=\" + finalScore);\n  return {\n    job_id: job.job_id,\n    job_title: job.job_title,\n    company: job.company,\n    application_url: job.application_url,\n    match_score: finalScore,\n    score_breakdown: { keyword_score: Math.round(kw.score*10)/10, semantic_score: Math.round(sem*100*10)/10, semantic_method: semanticMethodUsed, experience_score: Math.round(expScore*10)/10, preferred_skill_score: Math.round(pref*10)/10, education_score: Math.round(edu*10)/10, title_score: Math.round(title*10)/10, location_score: Math.round(loc*10)/10, weights: WEIGHTS, hybrid_score: Math.round(hybridScore*10)/10 },\n    matched_skills: kw.matched,\n    missing_skills: kw.missing,\n    experience_match: exp,\n    semantic_similarity: Math.round(sem*100)/100,\n    decision: decision,\n    explanation: explanationParts.join(\"; \"),\n    method: method,\n    ranked_at: new Date().toISOString()\n  };\n});\nranked.sort(function(a,b){\n  if (b.match_score !== a.match_score) return b.match_score - a.match_score;\n  if (a.experience_match.satisfied !== b.experience_match.satisfied) return a.experience_match.satisfied ? -1 : 1;\n  return (a.job_id||\"\").localeCompare(b.job_id||\"\");\n});\nreturn ranked.map(function(job){ return { json: job }; });"
+      },
+      "id": "e65900ae-393f-4c38-9142-5c6d79bc172e",
+      "name": "Compute Hybrid Scores",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.item.json;\nconst candidate = input.candidate_profile;\nconst jobs = input.jobs || [];\nconst method = input.method || \"hybrid\";\n\nfunction candidateText(c) {\n  const parts = [];\n  parts.push((c.job_titles || []).join(\" \"));\n  parts.push((c.preferred_roles || []).join(\" \"));\n  parts.push((c.technical_skills || []).join(\" \"));\n  parts.push((c.programming_languages || []).join(\" \"));\n  parts.push((c.frameworks || []).join(\" \"));\n  parts.push((c.tools || []).join(\" \"));\n  parts.push((c.keywords || []).join(\" \"));\n  return parts.join(\" \").trim() || \"candidate profile\";\n}\nfunction jobText(j) {\n  const parts = [j.job_title || \"\", j.description || \"\", (j.required_skills || []).join(\" \"), (j.preferred_skills || []).join(\" \")];\n  return parts.join(\" \").trim() || \"job posting\";\n}\n\nconst requests = [];\nrequests.push({ model: \"models/gemini-embedding-001\", content: { parts: [{ text: candidateText(candidate) }] } });\njobs.forEach(function(j) { requests.push({ model: \"models/gemini-embedding-001\", content: { parts: [{ text: jobText(j) }] } }); });\n\nreturn [{ json: { requests: requests, candidate_profile: candidate, jobs: jobs, method: method } }];"
+      },
+      "id": "ec04bac5-ae13-4348-a4b8-5592bef2b4d6",
+      "name": "Build Embedding Batch Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"requests\": $json.requests } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "2edc2f62-f4b6-4fc2-bf9b-00935e3d2aac",
+      "name": "Get Batch Embeddings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        784,
+        400
+      ],
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "heqsK90NCseftWS6",
+          "name": "Simplified Custom Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger (standalone test)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Build Embedding Batch Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Embedding Batch Request": {
+      "main": [
+        [
+          {
+            "node": "Get Batch Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Batch Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Compute Hybrid Scores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "f231ee34-6baa-47f0-8b93-42ebed9051f9",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "60010262ba08e536d85a07cf0de2bce823c5731ae454d3a33b08c2dc627c81fa"
+  },
+  "nodeGroups": [],
+  "id": "VGUvf1UdgDwbMKDY",
+  "tags": []
+}

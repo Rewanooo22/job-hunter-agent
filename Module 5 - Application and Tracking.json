@@ -1,0 +1,1350 @@
+{
+  "name": "Module 5 - Application and Tracking",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e46f5a38-6ba1-4378-9b9c-f9b2c1cf1c10",
+      "name": "Manual Trigger (standalone test)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "application_package",
+              "value": "={{ $json.application_package && $json.application_package.candidate_id ? $json.application_package : { \"candidate_id\": \"sample_001\", \"candidate_email\": \"sample.candidate@example.org\", \"job_id\": \"job_001\", \"job_title\": \"Senior Backend Engineer\", \"company\": \"Acme Corp\", \"application_url\": \"https://example.com/job1\", \"match_score\": 82.5, \"cv_file\": \"placeholder\", \"cv_tex_file\": \"placeholder\", \"cover_letter_file\": \"placeholder\", \"tailoring_meta\": { \"model\": \"gemini-3.5-flash\" }, \"fact_check\": { \"unsupported_claims\": [], \"passed\": true }, \"latex_compiled\": false } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "60a6e8b5-20db-4956-8822-7d0f70547a16",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        272,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "application_package",
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "id": "8403cafe-6c06-4ee8-a985-4c043f76ba75",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const pkg = $input.item.json.application_package;\nconst REQUIRED = [\"candidate_id\",\"candidate_email\",\"job_id\",\"job_title\",\"company\",\"application_url\",\"fact_check\"];\nconst errors = [];\nif (!pkg) { errors.push(\"application_package missing entirely\"); }\nelse {\n  for (const f of REQUIRED) { if (pkg[f] === undefined || pkg[f] === null) { errors.push(\"Missing field: \" + f); } }\n  if (pkg.fact_check && pkg.fact_check.passed !== true) { errors.push(\"fact_check.passed is not true - package not trustworthy for submission\"); }\n}\nreturn [{ json: { valid: errors.length === 0, errors: errors, package: pkg } }];"
+      },
+      "id": "3b9ff0b7-3f71-4cf2-bf16-a904e08dead7",
+      "name": "Validate Package",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid ? \"true\" : \"false\" }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "true"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f76fde17-a6fd-4cd4-ac65-38da88bf1da6",
+      "name": "Package Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        768,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.airtable.com/v0/appmtj6Kh7lY7gcht/APPLICATION?filterByFormula=\" + encodeURIComponent(\"AND({candidate_id}='\" + $json.package.candidate_id + \"', {job_id}='\" + $json.package.job_id + \"')\") }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "0ac2ac41-42ca-483b-a808-aa1b97f97e8e",
+      "name": "Duplicate Check (Airtable)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1008,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "rH4Akw1YKePunWYz",
+          "name": "Simplified Custom Auth account 3"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $input.item.json;\nconst pkgData = $(\"Validate Package\").item.json.package;\nlet isDuplicate = false;\nlet checkStatus = \"ok\";\nif (!resp || resp.error || !Array.isArray(resp.records)) { checkStatus = \"unavailable\"; }\nelse { isDuplicate = resp.records.length > 0; }\nreturn [{ json: { is_duplicate: isDuplicate, duplicate_check_status: checkStatus, package: pkgData } }];"
+      },
+      "id": "8aae346f-3acc-412f-8183-469eb2569d06",
+      "name": "Parse Duplicate Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.is_duplicate ? \"true\" : \"false\" }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "true"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4602a470-f2bb-4ef4-854e-4bb438110be7",
+      "name": "Is Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1488,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d1",
+              "name": "application_id",
+              "value": "={{ \"dup-\" + $now.toMillis() }}",
+              "type": "string"
+            },
+            {
+              "id": "d2",
+              "name": "candidate_id",
+              "value": "={{ $json.package.candidate_id }}",
+              "type": "string"
+            },
+            {
+              "id": "d3",
+              "name": "job_id",
+              "value": "={{ $json.package.job_id }}",
+              "type": "string"
+            },
+            {
+              "id": "d4",
+              "name": "company",
+              "value": "={{ $json.package.company }}",
+              "type": "string"
+            },
+            {
+              "id": "d5",
+              "name": "job_title",
+              "value": "={{ $json.package.job_title }}",
+              "type": "string"
+            },
+            {
+              "id": "d6",
+              "name": "approval_decision",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "d7",
+              "name": "application_status",
+              "value": "skipped_duplicate",
+              "type": "string"
+            },
+            {
+              "id": "d8",
+              "name": "submission_method",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "d9",
+              "name": "submitted_at",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "d10",
+              "name": "attempts",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "d11",
+              "name": "confirmation_sent",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "d12",
+              "name": "error",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c1c3bbf5-b41a-4f4b-918e-cad039be9d5c",
+      "name": "Emit Duplicate Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1728,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "={{ \"Approve application: \" + $json.package.job_title + \" at \" + $json.package.company }}",
+        "formDescription": "Review the tailored application package before it is submitted (mock submission only).",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "APPROVE"
+                  },
+                  {
+                    "option": "REJECT"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "limitWaitTime": true,
+        "resumeAmount": 24,
+        "options": {}
+      },
+      "id": "a5c9a2b1-28d6-4b32-92e4-dd8076289e76",
+      "name": "Wait for Human Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1728,
+        464
+      ],
+      "webhookId": "324957e8-da5f-487c-904f-2763c11f490b"
+    },
+    {
+      "parameters": {
+        "jsCode": "const resumed = $input.item.json;\nconst pkg = $(\"Parse Duplicate Check\").item.json.package;\n\n// n8n form returns \"Decision\" with capital D\nconst decision =\n  resumed.Decision ||\n  resumed.decision ||\n  (resumed.data && (resumed.data.Decision || resumed.data.decision)) ||\n  null;\n\nreturn [{\n  json: {\n    decision: decision,\n    package: pkg\n  }\n}];"
+      },
+      "id": "9f674028-fd3f-43ed-9f9f-263442330908",
+      "name": "Process Approval Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1968,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.decision }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "APPROVE"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7fa568b3-7136-4234-b672-8b0fd863e170",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2208,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mock submission only -- never contacts the real employer application_url, per brief section 16/rules.\n// Real validation: a missing/invalid application_url is treated as a permanent failure (not retryable -- bad data, not a transient error).\nconst pkg = $input.item.json.package;\nconst urlValid = !!(pkg.application_url && /^https?:\\/\\//.test(pkg.application_url));\nreturn [{ json: { package: pkg, url_valid: urlValid, submitted_at: new Date().toISOString(), attempts: 1 } }];"
+      },
+      "id": "8006bf0b-ce13-46ff-8c0c-686c7b9aafa8",
+      "name": "Mock Submission",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "رhttps://api.airtable.com/v0/appmtj6Kh7lY7gcht/APPLICATION",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"fields\": { \"candidate_id\": $json.package.candidate_id, \"job_id\": $json.package.job_id, \"company\": $json.package.company, \"job_title\": $json.package.job_title, \"application_status\": \"submitted\", \"submitted_at\": $json.submitted_at } } }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "d51e0d4f-dde1-473e-a3c9-01291f9c48b9",
+      "name": "Persist Tracking Record (Airtable)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2800,
+        128
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "rH4Akw1YKePunWYz",
+          "name": "Simplified Custom Auth account 3"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "application_id",
+              "type": "string",
+              "value": "={{ $(\"Mock Submission\").item.json.package.candidate_id + \"-\" + $(\"Mock Submission\").item.json.package.job_id + \"-\" + $now.toMillis() }}"
+            },
+            {
+              "id": "s2",
+              "name": "candidate_id",
+              "type": "string",
+              "value": "={{ $(\"Mock Submission\").item.json.package.candidate_id }}"
+            },
+            {
+              "id": "s3",
+              "name": "job_id",
+              "type": "string",
+              "value": "={{ $(\"Mock Submission\").item.json.package.job_id }}"
+            },
+            {
+              "id": "s4",
+              "name": "company",
+              "type": "string",
+              "value": "={{ $(\"Mock Submission\").item.json.package.company }}"
+            },
+            {
+              "id": "s5",
+              "name": "job_title",
+              "type": "string",
+              "value": "={{ $(\"Mock Submission\").item.json.package.job_title }}"
+            },
+            {
+              "id": "s6",
+              "name": "approval_decision",
+              "type": "string",
+              "value": "APPROVED"
+            },
+            {
+              "id": "s7",
+              "name": "application_status",
+              "type": "string",
+              "value": "submitted"
+            },
+            {
+              "id": "s8",
+              "name": "submission_method",
+              "type": "string",
+              "value": "mock"
+            },
+            {
+              "id": "s9",
+              "name": "submitted_at",
+              "type": "string",
+              "value": "={{ $(\"Mock Submission\").item.json.submitted_at }}"
+            },
+            {
+              "id": "s10",
+              "name": "attempts",
+              "type": "number",
+              "value": "={{ $(\"Mock Submission\").item.json.attempts }}"
+            },
+            {
+              "id": "s11",
+              "name": "confirmation_sent",
+              "type": "boolean",
+              "value": true
+            },
+            {
+              "id": "s12",
+              "name": "error",
+              "type": "object",
+              "value": "={{ null }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1a8d5bdc-4eb7-449a-be46-0e4ef82817b2",
+      "name": "Emit Submitted Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        3408,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.decision }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "REJECT"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ea0fbe8b-de1c-49a7-b651-e31410636731",
+      "name": "Explicitly Rejected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2448,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "j1",
+              "name": "application_id",
+              "value": "={{ \"rej-\" + $now.toMillis() }}",
+              "type": "string"
+            },
+            {
+              "id": "j2",
+              "name": "candidate_id",
+              "value": "={{ $json.package.candidate_id }}",
+              "type": "string"
+            },
+            {
+              "id": "j3",
+              "name": "job_id",
+              "value": "={{ $json.package.job_id }}",
+              "type": "string"
+            },
+            {
+              "id": "j4",
+              "name": "company",
+              "value": "={{ $json.package.company }}",
+              "type": "string"
+            },
+            {
+              "id": "j5",
+              "name": "job_title",
+              "value": "={{ $json.package.job_title }}",
+              "type": "string"
+            },
+            {
+              "id": "j6",
+              "name": "approval_decision",
+              "value": "REJECTED",
+              "type": "string"
+            },
+            {
+              "id": "j7",
+              "name": "application_status",
+              "value": "failed",
+              "type": "string"
+            },
+            {
+              "id": "j8",
+              "name": "submission_method",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "j9",
+              "name": "submitted_at",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "j10",
+              "name": "attempts",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "j11",
+              "name": "confirmation_sent",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "j12",
+              "name": "error",
+              "value": "={{ { \"code\": \"NOT_APPROVED\", \"message\": \"Application rejected at human approval stage\", \"stage\": \"approval\" } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1822f466-a4bc-412c-ba22-00399b7cde46",
+      "name": "Emit Rejected Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2688,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "t1",
+              "name": "application_id",
+              "value": "={{ \"timeout-\" + $now.toMillis() }}",
+              "type": "string"
+            },
+            {
+              "id": "t2",
+              "name": "candidate_id",
+              "value": "={{ $json.package.candidate_id }}",
+              "type": "string"
+            },
+            {
+              "id": "t3",
+              "name": "job_id",
+              "value": "={{ $json.package.job_id }}",
+              "type": "string"
+            },
+            {
+              "id": "t4",
+              "name": "company",
+              "value": "={{ $json.package.company }}",
+              "type": "string"
+            },
+            {
+              "id": "t5",
+              "name": "job_title",
+              "value": "={{ $json.package.job_title }}",
+              "type": "string"
+            },
+            {
+              "id": "t6",
+              "name": "approval_decision",
+              "value": "REVIEW",
+              "type": "string"
+            },
+            {
+              "id": "t7",
+              "name": "application_status",
+              "value": "pending_approval",
+              "type": "string"
+            },
+            {
+              "id": "t8",
+              "name": "submission_method",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "t9",
+              "name": "submitted_at",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "t10",
+              "name": "attempts",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "t11",
+              "name": "confirmation_sent",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "t12",
+              "name": "error",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3c790d12-9059-42e2-95ac-abbcd51d26eb",
+      "name": "Emit Approval Timeout Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2688,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "m1",
+              "name": "application_id",
+              "value": "={{ \"malformed-\" + $now.toMillis() }}",
+              "type": "string"
+            },
+            {
+              "id": "m2",
+              "name": "candidate_id",
+              "value": "={{ $json.package && $json.package.candidate_id || null }}",
+              "type": "string"
+            },
+            {
+              "id": "m3",
+              "name": "job_id",
+              "value": "={{ $json.package && $json.package.job_id || null }}",
+              "type": "string"
+            },
+            {
+              "id": "m4",
+              "name": "company",
+              "value": "={{ $json.package && $json.package.company || null }}",
+              "type": "string"
+            },
+            {
+              "id": "m5",
+              "name": "job_title",
+              "value": "={{ $json.package && $json.package.job_title || null }}",
+              "type": "string"
+            },
+            {
+              "id": "m6",
+              "name": "approval_decision",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "m7",
+              "name": "application_status",
+              "value": "failed",
+              "type": "string"
+            },
+            {
+              "id": "m8",
+              "name": "submission_method",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "m9",
+              "name": "submitted_at",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "m10",
+              "name": "attempts",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "m11",
+              "name": "confirmation_sent",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "m12",
+              "name": "error",
+              "value": "={{ { \"code\": \"MALFORMED_PACKAGE\", \"message\": $json.errors.join(\"; \"), \"stage\": \"validation\" } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8deb8cf0-300c-49a5-8a31-ade7aa88822b",
+      "name": "Emit Malformed Package Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1008,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.url_valid ? \"true\" : \"false\" }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "true"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "328c447c-e4b3-46b5-81dc-5f82352cc853",
+      "name": "Submission Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2592,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "pf1",
+              "name": "application_id",
+              "type": "string",
+              "value": "={{ \"permfail-\" + $now.toMillis() }}"
+            },
+            {
+              "id": "pf2",
+              "name": "candidate_id",
+              "type": "string",
+              "value": "={{ $json.package.candidate_id }}"
+            },
+            {
+              "id": "pf3",
+              "name": "job_id",
+              "type": "string",
+              "value": "={{ $json.package.job_id }}"
+            },
+            {
+              "id": "pf4",
+              "name": "company",
+              "type": "string",
+              "value": "={{ $json.package.company }}"
+            },
+            {
+              "id": "pf5",
+              "name": "job_title",
+              "type": "string",
+              "value": "={{ $json.package.job_title }}"
+            },
+            {
+              "id": "pf6",
+              "name": "approval_decision",
+              "type": "string",
+              "value": "APPROVED"
+            },
+            {
+              "id": "pf7",
+              "name": "application_status",
+              "type": "string",
+              "value": "failed"
+            },
+            {
+              "id": "pf8",
+              "name": "submission_method",
+              "type": "string",
+              "value": "mock"
+            },
+            {
+              "id": "pf9",
+              "name": "submitted_at",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "pf10",
+              "name": "attempts",
+              "type": "number",
+              "value": 1
+            },
+            {
+              "id": "pf11",
+              "name": "confirmation_sent",
+              "type": "boolean",
+              "value": false
+            },
+            {
+              "id": "pf12",
+              "name": "error",
+              "type": "object",
+              "value": "={{ { \"code\": \"PERMANENT_SUBMISSION_FAILURE\", \"message\": \"application_url is missing or invalid -- not retryable, submission permanently failed\", \"stage\": \"submission\" } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f9d8c243-c0cf-4d25-a4a5-ed29c5a00bb3",
+      "name": "Emit Permanent Failure Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2576,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const mockCtx = $(\"Mock Submission\").item.json;\nconst pkg = mockCtx.package;\nconst binary = {};\nlet hasPdf = false;\nif (pkg.cv_file && pkg.cv_file.indexOf(\"data:application/pdf;base64,\") === 0) {\n  const b64 = pkg.cv_file.split(\"base64,\")[1];\n  binary.cv_pdf = { data: b64, mimeType: \"application/pdf\", fileName: \"tailored_cv.pdf\" };\n  hasPdf = true;\n}\nconst coverText = pkg.cover_letter_file || \"\";\nbinary.cover_letter = { data: Buffer.from(coverText, \"utf-8\").toString(\"base64\"), mimeType: \"text/plain\", fileName: \"cover_letter.txt\" };\nreturn [{ json: { package: pkg, has_pdf_attachment: hasPdf }, binary: binary }];"
+      },
+      "id": "14397fbc-92a5-4fbc-b923-4a4f15cf6053",
+      "name": "Prepare Email Attachments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2928,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "rewannhanyy@gmail.com",
+        "toEmail": "={{ $json.package.candidate_email }}",
+        "subject": "={{ \"Application submitted: \" + $json.package.job_title + \" at \" + $json.package.company }}",
+        "emailFormat": "text",
+        "text": "={{ \"Your application for \" + $json.package.job_title + \" at \" + $json.package.company + \" has been submitted (mock submission). Your tailored CV and cover letter are attached. Match score: \" + $json.package.match_score }}",
+        "options": {
+          "fileAttachments": "={{ $json.has_pdf_attachment ? \"cv_pdf,cover_letter\" : \"cover_letter\" }}"
+        }
+      },
+      "id": "74e67259-b8b8-4cc6-9935-21e250136ba8",
+      "name": "Send Confirmation Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        3168,
+        304
+      ],
+      "webhookId": "bfb976d3-cddc-4975-bee1-41854772b85a",
+      "credentials": {
+        "smtp": {
+          "id": "sWWWl6k1sKyk3vro",
+          "name": "SMTP account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ef1",
+              "name": "application_id",
+              "type": "string",
+              "value": "={{ $(\"Mock Submission\").item.json.package.candidate_id + \"-\" + $(\"Mock Submission\").item.json.package.job_id + \"-\" + $now.toMillis() }}"
+            },
+            {
+              "id": "ef2",
+              "name": "candidate_id",
+              "type": "string",
+              "value": "={{ $(\"Mock Submission\").item.json.package.candidate_id }}"
+            },
+            {
+              "id": "ef3",
+              "name": "job_id",
+              "type": "string",
+              "value": "={{ $(\"Mock Submission\").item.json.package.job_id }}"
+            },
+            {
+              "id": "ef4",
+              "name": "company",
+              "type": "string",
+              "value": "={{ $(\"Mock Submission\").item.json.package.company }}"
+            },
+            {
+              "id": "ef5",
+              "name": "job_title",
+              "type": "string",
+              "value": "={{ $(\"Mock Submission\").item.json.package.job_title }}"
+            },
+            {
+              "id": "ef6",
+              "name": "approval_decision",
+              "type": "string",
+              "value": "APPROVED"
+            },
+            {
+              "id": "ef7",
+              "name": "application_status",
+              "type": "string",
+              "value": "submitted"
+            },
+            {
+              "id": "ef8",
+              "name": "submission_method",
+              "type": "string",
+              "value": "mock"
+            },
+            {
+              "id": "ef9",
+              "name": "submitted_at",
+              "type": "string",
+              "value": "={{ $(\"Mock Submission\").item.json.submitted_at }}"
+            },
+            {
+              "id": "ef10",
+              "name": "attempts",
+              "type": "number",
+              "value": "={{ $(\"Mock Submission\").item.json.attempts }}"
+            },
+            {
+              "id": "ef11",
+              "name": "confirmation_sent",
+              "type": "boolean",
+              "value": false
+            },
+            {
+              "id": "ef12",
+              "name": "error",
+              "type": "object",
+              "value": "={{ null }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7317de40-f96b-4247-a76a-d851cc4bac41",
+      "name": "Emit Submitted Status (Email Failed)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        3408,
+        464
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "5c445263-01e1-470e-aa8d-e268b74d2547",
+      "name": "Manual Trigger: Get Statistics",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.airtable.com/v0/REPLACE_WITH_BASE_ID/REPLACE_WITH_TABLE_NAME",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "f09c6d40-24c9-47d7-8906-d7341460f0b5",
+      "name": "Fetch All Tracking Records",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        272,
+        784
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $input.item.json;\nconst records = (resp && Array.isArray(resp.records)) ? resp.records : [];\nconst counts = { submitted: 0, failed: 0, skipped_duplicate: 0, pending_approval: 0, total: records.length };\nrecords.forEach(function(r) {\n  const status = r.fields && r.fields.application_status;\n  if (status && counts[status] !== undefined) { counts[status]++; }\n});\nreturn [{ json: { statistics: counts, generated_at: new Date().toISOString(), note: \"Computed from the Airtable tracking table current contents at query time; requires the Airtable base/table and credential to be configured.\" } }];"
+      },
+      "id": "17a5c2a9-ae1e-4645-9fe9-a1f3af65bbe2",
+      "name": "Compute Statistics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        784
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger (standalone test)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Package": {
+      "main": [
+        [
+          {
+            "node": "Package Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Package Valid?": {
+      "main": [
+        [
+          {
+            "node": "Duplicate Check (Airtable)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Emit Malformed Package Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate Check (Airtable)": {
+      "main": [
+        [
+          {
+            "node": "Parse Duplicate Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Duplicate Check": {
+      "main": [
+        [
+          {
+            "node": "Is Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "Emit Duplicate Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait for Human Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Human Approval": {
+      "main": [
+        [
+          {
+            "node": "Process Approval Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Approval Decision": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Mock Submission",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Explicitly Rejected?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Explicitly Rejected?": {
+      "main": [
+        [
+          {
+            "node": "Emit Rejected Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Emit Approval Timeout Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock Submission": {
+      "main": [
+        [
+          {
+            "node": "Submission Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submission Valid?": {
+      "main": [
+        [
+          {
+            "node": "Persist Tracking Record (Airtable)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Emit Permanent Failure Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Tracking Record (Airtable)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email Attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Email Attachments": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Confirmation Email": {
+      "main": [
+        [
+          {
+            "node": "Emit Submitted Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Emit Submitted Status (Email Failed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger: Get Statistics": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Tracking Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Tracking Records": {
+      "main": [
+        [
+          {
+            "node": "Compute Statistics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "f1e9e7cc-d21b-453f-9042-2faab5de04a9",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "60010262ba08e536d85a07cf0de2bce823c5731ae454d3a33b08c2dc627c81fa"
+  },
+  "nodeGroups": [],
+  "id": "LdqrrvktkJwG5BD4",
+  "tags": []
+}

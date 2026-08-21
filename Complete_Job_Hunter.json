@@ -1,0 +1,805 @@
+{
+  "name": "Complete_Job_Hunter",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a4c1c374-083b-4151-a503-2525bd47d1d9",
+      "name": "Manual Trigger (standalone test)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "o1",
+              "name": "cv_file_url",
+              "value": "={{ $json.cv_file_url || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "o2",
+              "name": "original_cv_tex",
+              "value": "={{ $json.original_cv_tex || \"\\\\begin{document}\\nSample Candidate is a software engineer with 5 years experience in Python and PostgreSQL at Acme Corp. Bachelor of Science in Computer Science, Sample University, 2018.\\n\\\\end{document}\" }}",
+              "type": "string"
+            },
+            {
+              "id": "o3",
+              "name": "candidate_id",
+              "value": "={{ $json.candidate_id || ($now.toMillis() + \"-\" + Math.random().toString(36).slice(2,8)) }}",
+              "type": "string"
+            },
+            {
+              "id": "o4",
+              "name": "search_keywords",
+              "value": "={{ $json.search_keywords && $json.search_keywords.length ? $json.search_keywords : [\"python developer\"] }}",
+              "type": "array"
+            },
+            {
+              "id": "o5",
+              "name": "search_location",
+              "value": "={{ $json.search_location || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "o6",
+              "name": "search_seniority",
+              "value": "={{ $json.search_seniority || \"\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "374c976d-e2c8-468a-ba8c-c04d8355e13d",
+      "name": "Normalize Orchestrator Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        272,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "cv_file_url"
+            },
+            {
+              "name": "original_cv_tex"
+            },
+            {
+              "name": "candidate_id"
+            },
+            {
+              "name": "search_keywords",
+              "type": "array"
+            },
+            {
+              "name": "search_location"
+            },
+            {
+              "name": "search_seniority"
+            }
+          ]
+        }
+      },
+      "id": "ec1b573f-d264-4aba-828c-e5f40f75e489",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "pzFiFyu7HU4P65Gf"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "cv_file_url": "={{ $json.cv_file_url }}",
+            "candidate_id": "={{ $json.candidate_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "cv_file_url",
+              "displayName": "cv_file_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "candidate_id",
+              "displayName": "candidate_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "3b0d11cd-82f6-4608-9df5-bc0dd0e44ec9",
+      "name": "Execute Workflow -> Module 1",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        528,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.schema_version ? \"true\" : \"false\" }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "true",
+              "id": "f091feaf-79e9-490a-b0bf-03f72f0f290e"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "22e31fa8-1a95-4334-bbe5-6bf8c04bd462",
+      "name": "Module 1 Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        768,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "9e7zZsFFHlV0c3q1"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "keywords": "={{ $(\"Normalize Orchestrator Input\").item.json.search_keywords && $(\"Normalize Orchestrator Input\").item.json.search_keywords.length ? $(\"Normalize Orchestrator Input\").item.json.search_keywords : $json.keywords }}",
+            "location": "={{ $(\"Normalize Orchestrator Input\").item.json.search_location }}",
+            "seniority": "={{ $(\"Normalize Orchestrator Input\").item.json.search_seniority }}",
+            "max_results": 50
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "keywords",
+              "displayName": "keywords",
+              "type": "array",
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "type": "string",
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "seniority",
+              "displayName": "seniority",
+              "type": "string",
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "max_results",
+              "displayName": "max_results",
+              "type": "number",
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b2fd66fe-738e-4bfe-bd46-bb1b8ebba3f9",
+      "name": "Execute Workflow -> Module 2",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1008,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "VGUvf1UdgDwbMKDY"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "candidate_profile": "={{ $(\"Module 1 Succeeded?\").item.json }}",
+            "jobs": "={{ $json.jobs }}",
+            "method": "hybrid"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "candidate_profile",
+              "displayName": "candidate_profile",
+              "type": "object",
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "jobs",
+              "displayName": "jobs",
+              "type": "array",
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "type": "string",
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "f95e7768-463c-4275-81bb-0785a3d41552",
+      "name": "Execute Workflow -> Module 3",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1248,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst counts = { total: items.length, APPLY: 0, REVIEW: 0, REJECT: 0 };\nitems.forEach(function(it){ const d = it.json.decision; if (counts[d] !== undefined) counts[d]++; });\nreturn items.map(function(it){ const out = Object.assign({}, it.json); out._decision_counts = counts; return { json: out }; });"
+      },
+      "id": "4be57bfe-2c38-4589-9819-1af663aa49a3",
+      "name": "Count Decisions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.decision }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "APPLY"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "78c941c2-7430-488f-b7c7-03f973dd5bbb",
+      "name": "Filter: decision = APPLY",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1728,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "run_status",
+              "value": "completed",
+              "type": "string"
+            },
+            {
+              "id": "r2",
+              "name": "candidate_id",
+              "value": "={{ $(\"Module 1 Succeeded?\").item.json.candidate_id }}",
+              "type": "string"
+            },
+            {
+              "id": "r3",
+              "name": "decision_counts",
+              "value": "={{ $(\"Count Decisions\").first().json._decision_counts }}",
+              "type": "object"
+            },
+            {
+              "id": "r4",
+              "name": "note",
+              "value": "Per-application Module 4/Module 5 outcomes are recorded in each sub-workflow own execution log (searchable by candidate_id + job_id); this report is not a live re-aggregation of those results.",
+              "type": "string"
+            },
+            {
+              "id": "r5",
+              "name": "run_completed_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b973492b-e8c0-4f24-8a4b-0addb6a0df72",
+      "name": "Final Run Report",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2208,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "oWWAEfRMNDNKYq4T"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "candidate_id": "={{ $(\"Module 1 Succeeded?\").item.json.candidate_id }}",
+            "candidate_email": "={{ $(\"Module 1 Succeeded?\").item.json.email }}",
+            "original_cv_tex": "={{ $(\"Normalize Orchestrator Input\").item.json.original_cv_tex }}",
+            "selected_job": "={{ $json }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "candidate_id",
+              "displayName": "candidate_id",
+              "type": "string",
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "candidate_email",
+              "displayName": "candidate_email",
+              "type": "string",
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "original_cv_tex",
+              "displayName": "original_cv_tex",
+              "type": "string",
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "selected_job",
+              "displayName": "selected_job",
+              "type": "object",
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "65aaad57-64e6-47bb-9915-b408b2db37b8",
+      "name": "Execute Workflow -> Module 4",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2208,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.fact_check && $json.fact_check.passed ? \"true\" : \"false\" }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "true"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "6959faff-4311-40e3-b5c3-a30726a7290a",
+      "name": "Module 4 Produced Package?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2448,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "LdqrrvktkJwG5BD4"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "application_package": "={{ $json }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "application_package",
+              "displayName": "application_package",
+              "type": "object",
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "d1f47b35-f041-44bf-a065-31b10f1559f7",
+      "name": "Execute Workflow -> Module 5",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2688,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "d0ea8260-d028-4863-bed7-70658ec5702b",
+      "name": "Loop Over APPLY Jobs",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1968,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "k1",
+              "name": "note",
+              "value": "Module 4 did not produce a valid package for this job; Module 5 skipped for this iteration.",
+              "type": "string"
+            },
+            {
+              "id": "k2",
+              "name": "module_4_result",
+              "value": "={{ $json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b0477935-6b3a-45f0-9bb6-d34204ee3382",
+      "name": "Log M4 Failure (Skip M5)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2688,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e1",
+              "name": "run_status",
+              "value": "aborted",
+              "type": "string"
+            },
+            {
+              "id": "e2",
+              "name": "aborted_at_stage",
+              "value": "module_1",
+              "type": "string"
+            },
+            {
+              "id": "e3",
+              "name": "module_1_result",
+              "value": "={{ $json }}",
+              "type": "object"
+            },
+            {
+              "id": "e4",
+              "name": "run_completed_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6e40b620-51b1-488c-94ee-08efbde88b1e",
+      "name": "Emit Run Report (M1 Failed)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1008,
+        608
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger (standalone test)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Orchestrator Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Orchestrator Input": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow -> Module 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Orchestrator Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow -> Module 1": {
+      "main": [
+        [
+          {
+            "node": "Module 1 Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Module 1 Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow -> Module 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Emit Run Report (M1 Failed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow -> Module 2": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow -> Module 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow -> Module 3": {
+      "main": [
+        [
+          {
+            "node": "Count Decisions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Decisions": {
+      "main": [
+        [
+          {
+            "node": "Filter: decision = APPLY",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: decision = APPLY": {
+      "main": [
+        [
+          {
+            "node": "Loop Over APPLY Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Run Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow -> Module 4": {
+      "main": [
+        [
+          {
+            "node": "Module 4 Produced Package?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Module 4 Produced Package?": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow -> Module 5",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log M4 Failure (Skip M5)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow -> Module 5": {
+      "main": [
+        [
+          {
+            "node": "Loop Over APPLY Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over APPLY Jobs": {
+      "main": [
+        [
+          {
+            "node": "Final Run Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Workflow -> Module 4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log M4 Failure (Skip M5)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over APPLY Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "05d9039f-f81b-4c0e-92c8-4545350bdad8",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "60010262ba08e536d85a07cf0de2bce823c5731ae454d3a33b08c2dc627c81fa"
+  },
+  "nodeGroups": [],
+  "id": "B3IdeMK0eVfdItwx",
+  "tags": []
+}

@@ -1,0 +1,763 @@
+{
+  "name": "Module 4 - CV Tailoring and Documents",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "6cc6baf5-aaba-4042-970f-646b266aa239",
+      "name": "Manual Trigger (standalone test)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "candidate_id",
+              "value": "={{ $json.candidate_id || \"sample_001\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "candidate_email",
+              "value": "={{ $json.candidate_email || \"sample.candidate@example.org\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "original_cv_tex",
+              "value": "={{ $json.original_cv_tex || \"\\\\begin{document}\\nSample Candidate is a software engineer with 5 years experience in Python and PostgreSQL at Acme Corp. Bachelor of Science in Computer Science, Sample University, 2018.\\n\\\\end{document}\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "selected_job",
+              "value": "={{ $json.selected_job && $json.selected_job.job_id ? $json.selected_job : { \"job_id\": \"job_001\", \"job_title\": \"Senior Backend Engineer\", \"company\": \"Acme Corp\", \"application_url\": \"https://example.com/job1\", \"description\": \"We need a backend engineer with Python and PostgreSQL experience, Kubernetes required.\", \"matched_skills\": [\"Python\", \"PostgreSQL\"], \"missing_skills\": [\"Kubernetes\"] } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "fc9baffe-2d1f-488f-b40d-f76edd219d63",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        272,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "candidate_id"
+            },
+            {
+              "name": "candidate_email"
+            },
+            {
+              "name": "original_cv_tex"
+            },
+            {
+              "name": "selected_job",
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "id": "9b6d1359-af14-4dd2-aadd-61d466a10eb8",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"system_instruction\": { \"parts\": [ { \"text\": \"You are a CV tailoring engine. You rewrite a professional summary, reorder the candidates own skills, experience, and projects by relevance, and write a cover letter, using ONLY facts already present in the original CV text you are given. Never invent skills, employers, degrees, certifications, projects, or years not present in the original CV. Never claim any skill listed as missing for this job. Return ONLY a single JSON object, no markdown, no code fences, no prose before or after. The JSON object must have exactly these keys: tailored_summary (a two to four sentence professional summary rewritten for this role using only facts from the original CV), tailored_skills_order (an array of strings, a reordering of the candidates own skills most relevant to this job first, every item must already appear in the original CV text), tailored_body_latex (a LaTeX document body using only section, subsection, itemize, and enumerate commands and environments, presenting the candidates Skills, Experience, and Projects sections with items reordered so the most relevant to this job appear first within each section, using only employers, dates, degrees, project names, and facts that literally appear in the original CV text, never inventing or omitting any employer, degree, or project that exists in the original), cover_letter (three to four paragraphs, addressed to the hiring manager, must explicitly mention the exact company name and exact job title provided, and must reference at least two specific facts drawn only from the original CV). Do not use contractions.\" } ] }, \"contents\": [ { \"role\": \"user\", \"parts\": [ { \"text\": \"ORIGINAL CV TEXT:\\n\" + $json.original_cv_tex + \"\\n\\nTARGET JOB TITLE: \" + $json.selected_job.job_title + \"\\nTARGET COMPANY: \" + $json.selected_job.company + \"\\nJOB DESCRIPTION: \" + $json.selected_job.description + \"\\nMATCHED SKILLS (already confirmed present): \" + ($json.selected_job.matched_skills || []).join(\", \") + \"\\nMISSING SKILLS (do not claim these, do not imply the candidate has them): \" + ($json.selected_job.missing_skills || []).join(\", \") } ] } ], \"generationConfig\": { \"temperature\": 0.3, \"maxOutputTokens\": 3000, \"response_mime_type\": \"application/json\" } } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "25278744-3d69-4095-8d76-4cc2813e88eb",
+      "name": "LLM Tailor (Attempt 1)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        528,
+        304
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 5,
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "heqsK90NCseftWS6",
+          "name": "Simplified Custom Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const REQUIRED_KEYS = [\"tailored_summary\",\"tailored_skills_order\",\"tailored_body_latex\",\"cover_letter\"];\nconst PLACEHOLDER_COMPANIES = [\"example corp\",\"abc company\",\"xyz inc\",\"sample company\",\"your company\",\"acme inc\"];\nconst resp = $input.item.json;\nlet text = \"\";\nif (resp.candidates && resp.candidates[0] && resp.candidates[0].content && resp.candidates[0].content.parts && resp.candidates[0].content.parts[0] && resp.candidates[0].content.parts[0].text) { text = resp.candidates[0].content.parts[0].text; }\nlet tailored = null;\nlet parseError = null;\ntry { tailored = JSON.parse(text); } catch (e) { parseError = e.message; }\nconst candidateId = $(\"Normalize Input\").item.json.candidate_id;\nconst candidateEmail = $(\"Normalize Input\").item.json.candidate_email;\nconst originalCvTex = $(\"Normalize Input\").item.json.original_cv_tex;\nconst selectedJob = $(\"Normalize Input\").item.json.selected_job;\nconst unsupported = [];\nif (parseError) { unsupported.push(\"Invalid JSON: \" + parseError); }\nif (tailored) {\n  for (const k of REQUIRED_KEYS) { if (tailored[k] === undefined) { unsupported.push(\"Missing field: \" + k); } }\n  const rawLower = (originalCvTex || \"\").toLowerCase();\n  const missing = (selectedJob.missing_skills || []).map(function(s){ return (s||\"\").toLowerCase(); });\n  const matchedRequired = (selectedJob.matched_skills || []).map(function(s){ return (s||\"\").toLowerCase(); });\n  function containsAny(t, list) { const tl = (t || \"\").toLowerCase(); return list.filter(function(m) { return m && tl.indexOf(m) !== -1; }); }\n  (tailored.tailored_skills_order || []).forEach(function(skill) { if (rawLower.indexOf((skill || \"\").toLowerCase()) === -1) { unsupported.push(\"tailored_skills_order item not in original CV: \" + skill); } });\n  containsAny(tailored.tailored_summary, missing).forEach(function(m) { unsupported.push(\"tailored_summary claims missing skill: \" + m); });\n  containsAny(tailored.cover_letter, missing).forEach(function(m) { unsupported.push(\"cover_letter claims missing skill: \" + m); });\n  (tailored.tailored_skills_order || []).map(function(s){ return (s||\"\").toLowerCase(); }).filter(function(s){ return missing.indexOf(s) !== -1; }).forEach(function(m) { unsupported.push(\"tailored_skills_order claims missing skill: \" + m); });\n  if ((tailored.cover_letter || \"\").toLowerCase().indexOf((selectedJob.company || \"\").toLowerCase()) === -1) { unsupported.push(\"cover_letter does not mention company name\"); }\n  if ((tailored.cover_letter || \"\").toLowerCase().indexOf((selectedJob.job_title || \"\").toLowerCase()) === -1) { unsupported.push(\"cover_letter does not mention job title\"); }\n  const PLACEHOLDER_NAMES = [\"john doe\", \"jane doe\"];\n  if (PLACEHOLDER_NAMES.some(function(p) { return (tailored.tailored_summary || \"\").toLowerCase().indexOf(p) !== -1; })) { unsupported.push(\"tailored_summary contains placeholder name\"); }\n  const bodyLatex = tailored.tailored_body_latex || \"\";\n  const bodyLower = bodyLatex.toLowerCase();\n  const allText = (tailored.tailored_summary || \"\") + \" \" + bodyLatex + \" \" + (tailored.cover_letter || \"\");\n  const allTextLower = allText.toLowerCase();\n  PLACEHOLDER_COMPANIES.forEach(function(p) { if (allTextLower.indexOf(p) !== -1) { unsupported.push(\"placeholder company name detected: \" + p); } });\n  const yearsInGenerated = (allText.match(/\\b(19|20)\\d{2}\\b/g) || []);\n  yearsInGenerated.forEach(function(y) { if (rawLower.indexOf(y) === -1) { unsupported.push(\"year mentioned in generated content not found in original CV: \" + y); } });\n  containsAny(bodyLatex, missing).forEach(function(m) { unsupported.push(\"tailored_body_latex claims missing skill: \" + m); });\n  if (!bodyLatex.trim()) { unsupported.push(\"tailored_body_latex is empty\"); }\n  else if (bodyLower.indexOf(\"\\\\section\") === -1 && bodyLower.indexOf(\"\\\\subsection\") === -1) { unsupported.push(\"tailored_body_latex has no section or subsection commands\"); }\n  matchedRequired.forEach(function(m) { if (allTextLower.indexOf(m) === -1) { unsupported.push(\"confirmed matched skill dropped from tailored content: \" + m); } });\n}\nreturn [{ json: { passed: unsupported.length === 0, unsupported_claims: unsupported, tailored: tailored, candidate_id: candidateId, candidate_email: candidateEmail, original_cv_tex: originalCvTex, selected_job: selectedJob } }];"
+      },
+      "id": "90526047-11c0-4f60-83f9-1183af17e63c",
+      "name": "Parse and Fact-Check (Attempt 1)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.passed ? \"true\" : \"false\" }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "true"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5d0adb36-399e-4ceb-b535-2de2b8c8ffbf",
+      "name": "Fact-Check Passed (Attempt 1)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1008,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.item.json;\nconst tailored = input.tailored;\nconst originalTex = input.original_cv_tex || \"\";\nlet preamble = originalTex;\nconst marker = \"\\\\begin{document}\";\nconst idx = originalTex.indexOf(marker);\nif (idx !== -1) { preamble = originalTex.slice(0, idx + marker.length); }\nelse { preamble = \"\\\\documentclass{article}\\n\\\\begin{document}\"; }\nconst summaryBlock = \"\\n\\\\section*{Summary}\\n\" + (tailored.tailored_summary || \"\") + \"\\n\";\nconst body = tailored.tailored_body_latex || \"\";\nconst tex = preamble + summaryBlock + body + \"\\n\\\\end{document}\";\nreturn [{ json: { candidate_id: input.candidate_id, candidate_email: input.candidate_email, selected_job: input.selected_job, tailored: tailored, tailored_tex: tex, fact_check: { unsupported_claims: input.unsupported_claims, passed: input.passed } } }];"
+      },
+      "id": "566db088-9a22-4cf8-87df-ff4e465f4b75",
+      "name": "Reassemble Tailored LaTeX",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p1",
+              "name": "candidate_id",
+              "type": "string",
+              "value": "={{ $json.candidate_id }}"
+            },
+            {
+              "id": "p2",
+              "name": "candidate_email",
+              "type": "string",
+              "value": "={{ $json.candidate_email }}"
+            },
+            {
+              "id": "p3",
+              "name": "job_id",
+              "type": "string",
+              "value": "={{ $json.selected_job.job_id }}"
+            },
+            {
+              "id": "p4",
+              "name": "job_title",
+              "type": "string",
+              "value": "={{ $json.selected_job.job_title }}"
+            },
+            {
+              "id": "p5",
+              "name": "company",
+              "type": "string",
+              "value": "={{ $json.selected_job.company }}"
+            },
+            {
+              "id": "p6",
+              "name": "application_url",
+              "type": "string",
+              "value": "={{ $json.selected_job.application_url }}"
+            },
+            {
+              "id": "p7",
+              "name": "match_score",
+              "type": "string",
+              "value": "={{ $json.selected_job.match_score || null }}"
+            },
+            {
+              "id": "p8",
+              "name": "cv_file",
+              "type": "string",
+              "value": "={{ $json.cv_file }}"
+            },
+            {
+              "id": "p9",
+              "name": "cv_tex_file",
+              "type": "string",
+              "value": "={{ $json.tailored_tex }}"
+            },
+            {
+              "id": "p10",
+              "name": "cover_letter_file",
+              "type": "string",
+              "value": "={{ $json.tailored.cover_letter }}"
+            },
+            {
+              "id": "p11",
+              "name": "tailoring_meta",
+              "type": "object",
+              "value": "={{ { \"model\": \"gemini-3.5-flash\", \"prompt_version\": \"cv_tailor_v1.0\", \"generated_at\": $now.toISO() } }}"
+            },
+            {
+              "id": "p12",
+              "name": "fact_check",
+              "type": "object",
+              "value": "={{ $json.fact_check }}"
+            },
+            {
+              "id": "p13",
+              "name": "latex_compiled",
+              "type": "boolean",
+              "value": "={{ $json.latex_compiled }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "886936f0-3f1d-44be-83b3-be0660d73d9e",
+      "name": "Assemble application_package.json",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2480,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "candidate_id",
+              "value": "={{ $json.candidate_id }}",
+              "type": "string"
+            },
+            {
+              "id": "r2",
+              "name": "candidate_email",
+              "value": "={{ $json.candidate_email }}",
+              "type": "string"
+            },
+            {
+              "id": "r3",
+              "name": "original_cv_tex",
+              "value": "={{ $json.original_cv_tex }}",
+              "type": "string"
+            },
+            {
+              "id": "r4",
+              "name": "selected_job",
+              "value": "={{ $json.selected_job }}",
+              "type": "object"
+            },
+            {
+              "id": "r5",
+              "name": "regen_errors",
+              "value": "={{ $json.unsupported_claims.join(\", \") }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8e6b7de2-b0d6-4e03-936e-25b21f830dca",
+      "name": "Prepare Regeneration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1248,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"system_instruction\": { \"parts\": [ { \"text\": \"You are a CV tailoring engine. You rewrite a professional summary, reorder the candidates own skills, experience, and projects by relevance, and write a cover letter, using ONLY facts already present in the original CV text you are given. Never invent skills, employers, degrees, certifications, projects, or years not present in the original CV. Never claim any skill listed as missing for this job. Return ONLY a single JSON object, no markdown, no code fences, no prose before or after. The JSON object must have exactly these keys: tailored_summary (a two to four sentence professional summary rewritten for this role using only facts from the original CV), tailored_skills_order (an array of strings, a reordering of the candidates own skills most relevant to this job first, every item must already appear in the original CV text), tailored_body_latex (a LaTeX document body using only section, subsection, itemize, and enumerate commands and environments, presenting the candidates Skills, Experience, and Projects sections with items reordered so the most relevant to this job appear first within each section, using only employers, dates, degrees, project names, and facts that literally appear in the original CV text, never inventing or omitting any employer, degree, or project that exists in the original), cover_letter (three to four paragraphs, addressed to the hiring manager, must explicitly mention the exact company name and exact job title provided, and must reference at least two specific facts drawn only from the original CV). Do not use contractions. Your previous output failed fact-checking for these reasons: \" + $json.regen_errors + \". Regenerate the JSON object, correcting these issues, following the exact same schema and rules, and remain strictly grounded in the original CV text.\" } ] }, \"contents\": [ { \"role\": \"user\", \"parts\": [ { \"text\": \"ORIGINAL CV TEXT:\\n\" + $json.original_cv_tex + \"\\n\\nTARGET JOB TITLE: \" + $json.selected_job.job_title + \"\\nTARGET COMPANY: \" + $json.selected_job.company + \"\\nJOB DESCRIPTION: \" + $json.selected_job.description + \"\\nMATCHED SKILLS (already confirmed present): \" + ($json.selected_job.matched_skills || []).join(\", \") + \"\\nMISSING SKILLS (do not claim these, do not imply the candidate has them): \" + ($json.selected_job.missing_skills || []).join(\", \") } ] } ], \"generationConfig\": { \"temperature\": 0.1, \"maxOutputTokens\": 3000, \"response_mime_type\": \"application/json\" } } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "aec7fc52-72d6-4826-9896-cfd14ec8fdf9",
+      "name": "LLM Tailor (Retry)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1488,
+        464
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "7Q21L56Xg6uiNnX5",
+          "name": "Simplified Custom Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const REQUIRED_KEYS = [\"tailored_summary\",\"tailored_skills_order\",\"tailored_body_latex\",\"cover_letter\"];\nconst PLACEHOLDER_COMPANIES = [\"example corp\",\"abc company\",\"xyz inc\",\"sample company\",\"your company\",\"acme inc\"];\nconst resp = $input.item.json;\nlet text = \"\";\nif (resp.candidates && resp.candidates[0] && resp.candidates[0].content && resp.candidates[0].content.parts && resp.candidates[0].content.parts[0] && resp.candidates[0].content.parts[0].text) { text = resp.candidates[0].content.parts[0].text; }\nlet tailored = null;\nlet parseError = null;\ntry { tailored = JSON.parse(text); } catch (e) { parseError = e.message; }\nconst candidateId = $(\"Prepare Regeneration\").item.json.candidate_id;\nconst candidateEmail = $(\"Prepare Regeneration\").item.json.candidate_email;\nconst originalCvTex = $(\"Prepare Regeneration\").item.json.original_cv_tex;\nconst selectedJob = $(\"Prepare Regeneration\").item.json.selected_job;\nconst unsupported = [];\nif (parseError) { unsupported.push(\"Invalid JSON: \" + parseError); }\nif (tailored) {\n  for (const k of REQUIRED_KEYS) { if (tailored[k] === undefined) { unsupported.push(\"Missing field: \" + k); } }\n  const rawLower = (originalCvTex || \"\").toLowerCase();\n  const missing = (selectedJob.missing_skills || []).map(function(s){ return (s||\"\").toLowerCase(); });\n  const matchedRequired = (selectedJob.matched_skills || []).map(function(s){ return (s||\"\").toLowerCase(); });\n  function containsAny(t, list) { const tl = (t || \"\").toLowerCase(); return list.filter(function(m) { return m && tl.indexOf(m) !== -1; }); }\n  (tailored.tailored_skills_order || []).forEach(function(skill) { if (rawLower.indexOf((skill || \"\").toLowerCase()) === -1) { unsupported.push(\"tailored_skills_order item not in original CV: \" + skill); } });\n  containsAny(tailored.tailored_summary, missing).forEach(function(m) { unsupported.push(\"tailored_summary claims missing skill: \" + m); });\n  containsAny(tailored.cover_letter, missing).forEach(function(m) { unsupported.push(\"cover_letter claims missing skill: \" + m); });\n  (tailored.tailored_skills_order || []).map(function(s){ return (s||\"\").toLowerCase(); }).filter(function(s){ return missing.indexOf(s) !== -1; }).forEach(function(m) { unsupported.push(\"tailored_skills_order claims missing skill: \" + m); });\n  if ((tailored.cover_letter || \"\").toLowerCase().indexOf((selectedJob.company || \"\").toLowerCase()) === -1) { unsupported.push(\"cover_letter does not mention company name\"); }\n  if ((tailored.cover_letter || \"\").toLowerCase().indexOf((selectedJob.job_title || \"\").toLowerCase()) === -1) { unsupported.push(\"cover_letter does not mention job title\"); }\n  const PLACEHOLDER_NAMES = [\"john doe\", \"jane doe\"];\n  if (PLACEHOLDER_NAMES.some(function(p) { return (tailored.tailored_summary || \"\").toLowerCase().indexOf(p) !== -1; })) { unsupported.push(\"tailored_summary contains placeholder name\"); }\n  const bodyLatex = tailored.tailored_body_latex || \"\";\n  const bodyLower = bodyLatex.toLowerCase();\n  const allText = (tailored.tailored_summary || \"\") + \" \" + bodyLatex + \" \" + (tailored.cover_letter || \"\");\n  const allTextLower = allText.toLowerCase();\n  PLACEHOLDER_COMPANIES.forEach(function(p) { if (allTextLower.indexOf(p) !== -1) { unsupported.push(\"placeholder company name detected: \" + p); } });\n  const yearsInGenerated = (allText.match(/\\b(19|20)\\d{2}\\b/g) || []);\n  yearsInGenerated.forEach(function(y) { if (rawLower.indexOf(y) === -1) { unsupported.push(\"year mentioned in generated content not found in original CV: \" + y); } });\n  containsAny(bodyLatex, missing).forEach(function(m) { unsupported.push(\"tailored_body_latex claims missing skill: \" + m); });\n  if (!bodyLatex.trim()) { unsupported.push(\"tailored_body_latex is empty\"); }\n  else if (bodyLower.indexOf(\"\\\\section\") === -1 && bodyLower.indexOf(\"\\\\subsection\") === -1) { unsupported.push(\"tailored_body_latex has no section or subsection commands\"); }\n  matchedRequired.forEach(function(m) { if (allTextLower.indexOf(m) === -1) { unsupported.push(\"confirmed matched skill dropped from tailored content: \" + m); } });\n}\nreturn [{ json: { passed: unsupported.length === 0, unsupported_claims: unsupported, tailored: tailored, candidate_id: candidateId, candidate_email: candidateEmail, original_cv_tex: originalCvTex, selected_job: selectedJob } }];"
+      },
+      "id": "18b3ca93-e19f-44c4-af85-89f65b85b272",
+      "name": "Parse and Fact-Check (Retry)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.passed ? \"true\" : \"false\" }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "true"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a9a6696f-3d4b-4a1a-bb7d-05e657d0e0c3",
+      "name": "Fact-Check Passed (Retry)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1968,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1",
+              "name": "status",
+              "value": "failed",
+              "type": "string"
+            },
+            {
+              "id": "f2",
+              "name": "stage",
+              "value": "fact_check",
+              "type": "string"
+            },
+            {
+              "id": "f3",
+              "name": "error",
+              "value": "={{ { \"code\": \"UNSUPPORTED_CLAIMS\", \"message\": \"Tailored content failed fact-check after one regeneration attempt\", \"details\": $json.unsupported_claims } }}",
+              "type": "object"
+            },
+            {
+              "id": "f4",
+              "name": "candidate_id",
+              "value": "={{ $json.candidate_id }}",
+              "type": "string"
+            },
+            {
+              "id": "f5",
+              "name": "job_id",
+              "value": "={{ $json.selected_job.job_id }}",
+              "type": "string"
+            },
+            {
+              "id": "f6",
+              "name": "attempts",
+              "value": 2,
+              "type": "number"
+            },
+            {
+              "id": "f7",
+              "name": "failed_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "00ea8e74-9505-4cc5-a0ee-b8f683b1534c",
+      "name": "Emit Tailoring Failure",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2208,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://latex.ytotech.com/builds/sync",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"compiler\": \"pdflatex\", \"resources\": [ { \"main\": true, \"content\": $json.tailored_tex } ] } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 45000
+        }
+      },
+      "id": "7daaa98f-2d68-4042-83ec-8469fc481a49",
+      "name": "Compile LaTeX to PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2448,
+        160
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const httpItem = $input.item;\nconst bin = httpItem.binary && httpItem.binary.data;\nconst ctx = $(\"Reassemble Tailored LaTeX\").item.json;\n\nlet latexCompiled = false;\nlet cvFile = \"PDF compilation failed or the compiler service was unavailable.\";\nlet compileLog = null;\n\nif (bin) {\n  try {\n    // Read the REAL binary bytes from n8n\n    const buf = await this.helpers.getBinaryDataBuffer(0, \"data\");\n\n    const head = buf.slice(0, 5).toString(\"utf-8\");\n\n    if (head === \"%PDF-\" && buf.length > 500) {\n      latexCompiled = true;\n\n      // Store PDF as base64 data URL\n      cvFile =\n        \"data:application/pdf;base64,\" +\n        buf.toString(\"base64\");\n    } else {\n      compileLog = buf.toString(\"utf-8\").slice(0, 2000);\n    }\n\n  } catch (e) {\n    compileLog = \"Could not read compiler response body: \" + e.message;\n  }\n}\n\nreturn [{\n  json: {\n    candidate_id: ctx.candidate_id,\n    candidate_email: ctx.candidate_email,\n    selected_job: ctx.selected_job,\n    tailored: ctx.tailored,\n    tailored_tex: ctx.tailored_tex,\n    fact_check: ctx.fact_check,\n    latex_compiled: latexCompiled,\n    cv_file: cvFile,\n    compile_log: compileLog\n  }\n}];"
+      },
+      "id": "7521b24f-778f-4e5f-ac56-8a756bc847e8",
+      "name": "Verify Compiled PDF",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2672,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item;\n\nconst dataUrl = item.json.cv_file;\n\nif (!dataUrl || !dataUrl.startsWith(\"data:application/pdf;base64,\")) {\n  throw new Error(\"No valid PDF base64 data found in cv_file\");\n}\n\nconst base64 = dataUrl.split(\",\")[1];\nconst buffer = Buffer.from(base64, \"base64\");\n\nitem.binary = item.binary || {};\n\nitem.binary.cv_pdf = {\n  data: buffer.toString(\"base64\"),\n  mimeType: \"application/pdf\",\n  fileName: `${item.json.candidate_id || \"candidate\"}_${item.json.job_id || \"job\"}_tailored_cv.pdf`,\n  fileExtension: \"pdf\"\n};\n\nreturn [item];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2736,
+        544
+      ],
+      "id": "1164c77a-bd05-4dbf-afae-b3302792d0ae",
+      "name": "Create PDF Binary File"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "LdqrrvktkJwG5BD4",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/LdqrrvktkJwG5BD4",
+          "cachedResultName": "Module 5 - Application and Tracking"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "application_package": "={{ $(\"Assemble application_package.json\").item.json.application_package }}"
+          },
+          "matchingColumns": [
+            "application_package"
+          ],
+          "schema": [
+            {
+              "id": "application_package",
+              "displayName": "application_package",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2880,
+        544
+      ],
+      "id": "a4f7efe6-1291-4133-b10d-f636c63e9f36",
+      "name": "Call 'Module 5 - Application and Tracking'"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger (standalone test)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "LLM Tailor (Attempt 1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Tailor (Attempt 1)": {
+      "main": [
+        [
+          {
+            "node": "Parse and Fact-Check (Attempt 1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Fact-Check (Attempt 1)": {
+      "main": [
+        [
+          {
+            "node": "Fact-Check Passed (Attempt 1)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fact-Check Passed (Attempt 1)?": {
+      "main": [
+        [
+          {
+            "node": "Reassemble Tailored LaTeX",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Regeneration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Regeneration": {
+      "main": [
+        [
+          {
+            "node": "LLM Tailor (Retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Tailor (Retry)": {
+      "main": [
+        [
+          {
+            "node": "Parse and Fact-Check (Retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Fact-Check (Retry)": {
+      "main": [
+        [
+          {
+            "node": "Fact-Check Passed (Retry)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fact-Check Passed (Retry)?": {
+      "main": [
+        [
+          {
+            "node": "Reassemble Tailored LaTeX",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Emit Tailoring Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reassemble Tailored LaTeX": {
+      "main": [
+        [
+          {
+            "node": "Compile LaTeX to PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compile LaTeX to PDF": {
+      "main": [
+        [
+          {
+            "node": "Verify Compiled PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Compiled PDF": {
+      "main": [
+        [
+          {
+            "node": "Assemble application_package.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble application_package.json": {
+      "main": [
+        [
+          {
+            "node": "Create PDF Binary File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create PDF Binary File": {
+      "main": [
+        [
+          {
+            "node": "Call 'Module 5 - Application and Tracking'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "f9e01599-ea0e-4550-a60b-cb883838acbe",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "60010262ba08e536d85a07cf0de2bce823c5731ae454d3a33b08c2dc627c81fa"
+  },
+  "nodeGroups": [],
+  "id": "oWWAEfRMNDNKYq4T",
+  "tags": []
+}
